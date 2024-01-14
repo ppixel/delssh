@@ -1,0 +1,174 @@
+#!/bin/bash
+
+# FUNCTIONS START #########################################################################################################################
+
+# Show usage of the script
+usage()
+{
+    echo "Usage: ${0} -e <entry> [-dhnv]" 1>&2
+    exit 1
+}
+
+# Show a help how to use this script
+print_help()
+{
+    cat << EOF  
+Usage: ${0} -e <entry> [-dhnv]
+Delete entry from SSH known_hosts
+
+-d, -dry_run,       --dry_run               Dry-Run
+-e, -entry,         --entry                 Entry to delete from SSH known_hosts (must be only one entry)
+-h, -help,          --help                  Display help
+-n, -no_dns,        --no_dns                Do NOT DNS resolve (not working now, it dont do dns resolves for now)
+-v, -verbose,       --verbose               Verbose
+EOF
+    exit 2
+}
+
+# Check if dependent proram exists
+check_dependent_program()
+{
+    local program=${1}
+
+    if which ${program} > /dev/null 2>&1; then
+        if [ "${verbose}" = true ]; then echo "verbose: Dependent program ${program} found"; fi
+    else
+        echo "Dependent program ${program} was not found!"
+        if [ "${verbose}" = true ]; then echo "verbose: Dependent program ${program} not found!"; fi
+        exit 1
+    fi
+}
+
+# FUNCTIONS END ###########################################################################################################################
+
+# GLOBAL VARIABLES START ##################################################################################################################
+
+# Verbose off
+verbose=false
+
+# Dry-Run off
+dry_run=false
+
+# Do DNS resolve
+no_dns=true
+
+# Entry to delete from SSH known_hosts
+entry=""
+
+# SSH known_hosts file
+file_known_hosts=~/.ssh/known_hosts
+
+# GLOBAL VARIABLES END ####################################################################################################################
+
+# SCRIPT START ############################################################################################################################
+
+# Define allowed arguments for this script
+options=$(getopt -l "dry_run,entry:,help,no_dns,verbose" -o "de:hnv" -a -- "$@")
+eval set -- "$options"
+
+# Go through all given arguments
+while true; do
+    case "${1}" in
+        -d|--dry_run)
+            dry_run=true
+            ;;
+        -e|--entry)
+            shift
+            entry="${1}"
+            ;;
+        -h|--help) 
+            print_help
+            ;;
+        -n|--no_dns)
+            no_dns=true
+            ;;
+        -v|--verbose)
+            verbose=true
+            #set -xv    # Print all lines from script while running
+            ;;
+        --)
+            shift
+            break;;
+    esac
+    shift
+done
+
+# Print if verbose is on
+if [ "${verbose}" = true ]; then
+    echo "verbose: Verbose is on"
+fi
+
+# Print if dry-run is on
+if [ "${dry_run}" = true ]; then
+    echo "Dry-Run is on!"
+    if [ "${verbose}" = true ]; then echo "verbose: Dry-Run is on!"; fi
+fi
+
+# Check if required argument "entry" is set
+if [ -z "${entry}" ]; then
+    usage
+fi
+
+# Check if dependencies fits
+check_dependent_program "sed"
+check_dependent_program "grep"
+
+# Check if SSH known_hosts file exists
+if [ ! -f "${file_known_hosts}" ]; then
+    echo "SSH known_hosts could not be found!"
+    if [ "${verbose}" = true ]; then echo "verbose: known_hosts ${file_known_hosts} not found!"; fi
+    exit 1
+else
+    if [ "${verbose}" = true ]; then echo "verbose: known_hosts ${file_known_hosts} found"; fi
+fi
+
+# Check if entry exists in known_hosts
+matches=$($(which grep) -ci "${entry}" ${file_known_hosts})
+if [ "${matches}" -eq 0 ]; then
+    echo "${entry} not found in SSH known_hosts!"
+    if [ "${verbose}" = true ]; then echo "verbose: Entry ${entry} not found in known_hosts!"; fi
+    exit 1
+else
+    if [ "${verbose}" = true ]; then echo "verbose: Entry ${entry} found in known_hosts"; fi
+fi
+
+# Delete entry from SSH known_hosts depending on dry-run
+if [ "${dry_run}" = false ]; then
+    # NOT dry-run
+    # Delete entry from SSH known_hosts
+    error=$($(which sed) -i "/${entry}/d" ${file_known_hosts} 2>&1)
+    RC=${?}
+    if [ "${RC}" -ne 0 ]; then
+        echo "Problems with command $(which sed)!"
+        if [ "${verbose}" = true ]; then echo -e "verbose: Returncode of command $(which sed) = ${RC}\nverbose: ${error}"; fi
+    else
+        if [ "${verbose}" = true ]; then echo "verbose: Deleted ${entry} from known_hosts"; fi
+    fi
+
+    # Verify deleting of entry
+    matches=$($(which grep) -ci "${entry}" ${file_known_hosts})
+    if [ "${matches}" -ne 0 ]; then
+        echo "Not all entries from SSH known_hosts where deleted!"
+        if [ "${verbose}" = true ]; then echo "verbose: Not all entries from known_hosts where deleted! ${matches} still exists!"; fi
+    else
+        echo "${entry} was deleted from SSH known_hosts."
+        if [ "${verbose}" = true ]; then echo "verbose: Verified deletion ${entry} from known_hosts"; fi
+    fi
+else
+    # dry-run
+    # Try to delete entry from SSH known_hosts
+    error=$($(which sed) "/${entry}/d" ${file_known_hosts} 2>&1)
+    RC=${?}
+    if [ "${RC}" -ne 0 ]; then
+        echo "Problems with command $(which sed)!"
+        if [ "${verbose}" = true ]; then echo -e "verbose dry-run: Returncode of command $(which sed) = ${RC}\nverbose: ${error}"; fi
+        exit 1
+    else
+        echo "${entry} would have been deleted from SSH known_hosts, if dry-run would not be active!"
+        if [ "${verbose}" = true ]; then echo "verbose dry-run: Because of dry-run, there will be no verification of deletion of entry in known_hosts"; fi
+    fi
+fi
+
+exit 0
+
+# SCRIPT END ##############################################################################################################################
