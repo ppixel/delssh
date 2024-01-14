@@ -13,7 +13,7 @@ Simply download the file delss and put it in a folder from your $PATH variable.
 ```bash
 delssh -e <hostname or ip> [-dhnv]
 ```
-Please not, that -n dont work yet and you can only put a single hostname or IP-Address yet.
+Please note, that -n dont work yet and you can only put a single hostname or IP-Address yet.
 
 
 ## Tested
